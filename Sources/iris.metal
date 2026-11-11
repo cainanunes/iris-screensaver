@@ -1,11 +1,11 @@
-// Iris — protetor de tela do Mac (Metal).
-// PORT de caina.design/src/shaders/iridescent.frag.glsl (fonte da verdade).
-// Mudança de aparência se faz no .glsl do site, confere-se no ?debug, e só depois desce para cá.
+// Iris: macOS screensaver (Metal).
+// PORT of caina.design/src/shaders/iridescent.frag.glsl (source of truth).
+// Visual changes happen in the site's .glsl first, are checked there, and only then come down here.
 //
-// Divergências deliberadas deste port (mesma lista do port WGSL do Figma, iris-shader/README.md):
-//   - pow(x, 2.0) em distâncias virou e * e (base negativa dentro do raio do bojo)
-//   - pointer fixo em (0.5, 0.5) com força 0: protetor de tela não tem ponteiro vivo
-//   - uniforms em struct de floats (sem vec2 para evitar padding entre Swift e MSL)
+// Deliberate differences in this port (same list as the WGSL port for Figma, iris-shader):
+//   - pow(x, 2.0) on distances became sq(x) = x * x (negative base inside the bulge radius)
+//   - pointer fixed at (0.5, 0.5) with strength 0: a screensaver has no live pointer
+//   - uniforms in a struct of floats (no float2, to avoid padding between Swift and MSL)
 
 #include <metal_stdlib>
 using namespace metal;
@@ -36,7 +36,7 @@ struct VOut {
   float2 uv;
 };
 
-// Triângulo de tela cheia, uv com y para cima (igual ao Triangle do OGL).
+// Full-screen triangle, uv with y up (same as OGL's Triangle).
 vertex VOut iris_vertex(uint vid [[vertex_id]]) {
   float2 p = float2((vid << 1) & 2, vid & 2);  // (0,0) (2,0) (0,2)
   VOut o;
@@ -64,7 +64,7 @@ static float noise2(float2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Campo de altura do tecido: ondas direcionais em camadas + domain warp.
+// Fabric height field: layered directional waves + domain warp.
 static float heightField(float2 p, float t, float2 vUv, constant Uniforms& U) {
   float2 pg = float2(p.x, p.y * mix(1.0, 0.32, U.gravity));
 
@@ -75,13 +75,13 @@ static float heightField(float2 p, float t, float2 vUv, constant Uniforms& U) {
   );
   float2 q = pg + (warp - 0.5) * 1.25;
 
-  // Líquido: ondas viajantes
+  // Liquid: travelling waves
   float trav = 0.0;
   trav += sin(q.x * 1.9 + t * 0.8 + sin(q.y * 0.5 + t * 0.34) * 2.3) * 0.62;
   trav += sin(q.x * 0.72 - q.y * 0.33 + t * 0.52) * 0.26;
   trav += sin(dot(q, float2(1.45, 0.85)) + t * 1.05) * 0.12;
 
-  // Tecido: dobras ancoradas balançando no lugar
+  // Fabric: anchored folds swaying in place
   float stand = 0.0;
   stand += sin(q.x * 1.9 + sin(q.y * 0.42) * 1.3) * sin(t * 0.85 + q.x * 0.6) * 0.58;
   stand += sin(q.x * 0.85 + 1.7) * sin(t * 0.52 + q.y * 0.3 + 1.3) * 0.3;
@@ -89,11 +89,11 @@ static float heightField(float2 p, float t, float2 vUv, constant Uniforms& U) {
 
   float h = mix(stand, trav, U.flow);
 
-  // Ancoragem: topo preso, amplitude cresce rumo à barra
+  // Anchoring: top pinned, amplitude grows toward the hem
   float hem = mix(1.0, mix(0.22, 1.3, 1.0 - vUv.y), U.anchor);
   h *= hem;
 
-  // Toque (inerte no protetor: pointerStrength = 0, mantido por fidelidade à fonte)
+  // Touch (inert in the screensaver: pointerStrength = 0, kept for fidelity to the source)
   float2 aspect = float2(U.resX / U.resY, 1.0);
   float2 pa = (vUv - 0.5) * aspect;
   float2 ca = (float2(U.pointerX, U.pointerY) - 0.5) * aspect;
@@ -110,7 +110,7 @@ static float heightField(float2 p, float t, float2 vUv, constant Uniforms& U) {
   return h * U.amplitude;
 }
 
-// Rampa espectral (paleta cosseno)
+// Spectral ramp (cosine palette)
 static float3 spectral(float x, float saturation) {
   float3 rainbow = 0.5 + 0.5 * cos(6.2831853 * (x + float3(0.0, 0.33, 0.67)));
   rainbow = pow(rainbow, float3(0.82));

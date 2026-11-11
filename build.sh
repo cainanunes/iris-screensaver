@@ -1,13 +1,13 @@
 #!/bin/zsh
-# Build + instalação do protetor Iris sem Xcode (só Command Line Tools).
-# Uso: ./build.sh            → compila e instala em ~/Library/Screen Savers
-#      ./build.sh --no-install
+# Build and install the Iris screensaver without Xcode (Command Line Tools only).
+# Usage: ./build.sh            → build and install to ~/Library/Screen Savers
+#        ./build.sh --no-install
 set -euo pipefail
 cd "$(dirname "$0")"
 
 NAME=IrisScreenSaver
 OUT="build/$NAME.saver"
-ARCH="$(uname -m)"   # arm64 no M5
+ARCH="$(uname -m)"
 
 rm -rf build
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources"
@@ -34,8 +34,8 @@ if [[ "${1:-}" != "--no-install" ]]; then
   rm -rf "$DEST"
   cp -R "$OUT" "$DEST"
   xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
-  # Derruba o host de protetores legados para ele recarregar o bundle novo
+  # Kill the legacy screensaver host so it reloads the new bundle
   killall legacyScreenSaver 2>/dev/null || true
-  echo "✓ instalado em $DEST"
-  echo "  Ajustes → Papel de Parede e Protetor de Tela → Iris (fechar e reabrir os Ajustes se não aparecer)"
+  echo "✓ installed to $DEST"
+  echo "  System Settings → Screen Saver → Iris (quit and reopen System Settings if it does not show up)"
 fi

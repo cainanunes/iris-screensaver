@@ -1,12 +1,12 @@
-// Iris — protetor de tela do Mac (Metal).
-// A aparência vem de Sources/iris.metal, port do .glsl do site caina.design.
-// Os parâmetros abaixo são o ponto de partida (defaults do site, speed 0.35 como no vídeo 1080p).
-// Para ajustar: editar, rodar ./build.sh, pronto. Não há painel de opções de propósito.
+// Iris: macOS screensaver (Metal).
+// The look comes from Sources/iris.metal, a port of the caina.design site's .glsl shader.
+// The parameters below are the starting point (site defaults, with speed at 0.35).
+// To tune: edit, run ./build.sh, done. There is intentionally no options panel.
 //
-// Arquitetura (08/10/2026): Metal renderiza em IOSurfaces e a camada comum da view recebe o
-// IOSurface como `contents`. Motivo medido: no host de tela cheia do macOS 26, tanto MTKView
-// quanto CAMetalLayer renderizam (quadros no log) mas NÃO são exibidos; no preview, são.
-// IOSurface como contents é composto como imagem, pelo mesmo caminho que o WebKit usa.
+// Architecture: Metal renders into IOSurfaces, and the view's plain layer receives the
+// IOSurface as `contents`. Measured reason: in the macOS 26 full-screen host, both MTKView
+// and CAMetalLayer render (frames show up in the log) but are NOT displayed; in the preview they are.
+// An IOSurface as contents is composited as an image, through the same path WebKit uses.
 
 import ScreenSaver
 import Metal
@@ -31,12 +31,12 @@ enum IrisParams {
   static let gravity: Float = 0.6
   static let flow: Float = 0.2
   static let anchor: Float = 0.7
-  /// Escala de render relativa ao backing (1.0 = nativo). 0.5 no Studio Display corta o custo em 4×.
+  /// Render scale relative to the backing store (1.0 = native). 0.5 cuts GPU cost by 4× on large displays.
   static let renderScale: CGFloat = 1.0
   static let fps: Double = 60
 }
 
-// Espelha struct Uniforms em iris.metal, campo a campo, na mesma ordem (só floats: sem padding).
+// Mirrors struct Uniforms in iris.metal, field by field, in the same order (floats only, so no padding).
 struct IrisUniforms {
   var resX: Float = 1, resY: Float = 1
   var time: Float = 0
@@ -97,7 +97,7 @@ final class IrisScreenSaverView: ScreenSaverView {
     layer?.isOpaque = true
 
     guard let device = MTLCreateSystemDefaultDevice() else {
-      setupError = "Metal indisponível"
+      setupError = "Metal unavailable"
       return
     }
     self.device = device
@@ -106,11 +106,11 @@ final class IrisScreenSaverView: ScreenSaverView {
     do {
       let bundle = Bundle(for: IrisScreenSaverView.self)
       guard let url = bundle.url(forResource: "iris", withExtension: "metal") else {
-        setupError = "iris.metal não encontrado no bundle"
+        setupError = "iris.metal not found in bundle"
         return
       }
       let source = try String(contentsOf: url, encoding: .utf8)
-      // Compilação em tempo de execução: dispensa o compilador `metal` do Xcode.
+      // Runtime compilation: no need for Xcode's `metal` compiler.
       let library = try device.makeLibrary(source: source, options: nil)
       let desc = MTLRenderPipelineDescriptor()
       desc.vertexFunction = library.makeFunction(name: "iris_vertex")
@@ -120,11 +120,11 @@ final class IrisScreenSaverView: ScreenSaverView {
       os_log("Iris pipeline ok (%{public}@), preview=%d, bounds=%{public}@", log: irisLog, type: .info,
              device.name, isPreview ? 1 : 0, NSStringFromRect(bounds))
     } catch {
-      setupError = "Falha ao compilar o shader: \(error)"
+      setupError = "Shader compilation failed: \(error)"
     }
   }
 
-  // MARK: alvos (IOSurface + textura)
+  // MARK: targets (IOSurface + texture)
 
   private func ensureTargets() {
     guard let device else { return }
@@ -139,18 +139,18 @@ final class IrisScreenSaverView: ScreenSaverView {
         .width: w, .height: h, .bytesPerElement: 4, .bytesPerRow: w * 4,
         .pixelFormat: UInt32(0x42475241) // 'BGRA'
       ]
-      guard let surface = IOSurface(properties: props) else { setupError = "IOSurface falhou"; return }
+      guard let surface = IOSurface(properties: props) else { setupError = "IOSurface creation failed"; return }
       let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
       td.usage = [.renderTarget]
       td.storageMode = .shared
-      guard let tex = device.makeTexture(descriptor: td, iosurface: surface, plane: 0) else { setupError = "textura IOSurface falhou"; return }
+      guard let tex = device.makeTexture(descriptor: td, iosurface: surface, plane: 0) else { setupError = "IOSurface texture creation failed"; return }
       targets.append(Target(surface: surface, texture: tex))
     }
     layer?.contentsScale = window?.backingScaleFactor ?? 2.0
     os_log("Iris targets %dx%d (preview=%d)", log: irisLog, type: .info, w, h, isPreview ? 1 : 0)
   }
 
-  // MARK: ciclo de vida
+  // MARK: lifecycle
 
   override func startAnimation() {
     super.startAnimation()
@@ -179,7 +179,7 @@ final class IrisScreenSaverView: ScreenSaverView {
     ensureTargets()
   }
 
-  // O host chama isto a cada animationTimeInterval; é o nosso relógio.
+  // The host calls this every animationTimeInterval; it is our clock.
   override func animateOneFrame() {
     render()
   }
@@ -192,7 +192,7 @@ final class IrisScreenSaverView: ScreenSaverView {
   private func render() {
     ensureTargets()
     guard let pipeline, let queue, targets.count == 3 else { return }
-    if inflight.wait(timeout: .now()) != .success { return }   // GPU atrasada: pula o quadro
+    if inflight.wait(timeout: .now()) != .success { return }   // GPU behind: skip the frame
 
     let target = targets[targetIndex]
     targetIndex = (targetIndex + 1) % targets.count
@@ -233,7 +233,7 @@ final class IrisScreenSaverView: ScreenSaverView {
     cmd.commit()
   }
 
-  // Sem Metal: preto digno, nunca tela quebrada.
+  // Without Metal: clean black, never a broken screen.
   override func draw(_ rect: NSRect) {
     if pipeline == nil {
       NSColor.black.setFill()
