@@ -1,5 +1,7 @@
 # Iris screensaver
 
+<img width="640" height="360" alt="iris_640_15fps" src="https://github.com/user-attachments/assets/dfb6d6b4-9c57-46b6-8a3c-2d0645f28ffd" />
+
 A macOS screensaver that renders the iridescent field from [caina.design](https://caina.design) natively in **Metal**.
 
 It is one of three ports of the same shader, each kept in sync with a single source of truth:
